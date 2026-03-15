@@ -7,7 +7,7 @@ Shared data loading, preprocessing, and reporting helpers used by all method mod
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.preprocessing import StandardScaler
 
 
 # ── Colour codes for terminal output ─────────────────────────────────────────

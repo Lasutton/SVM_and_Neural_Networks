@@ -33,12 +33,27 @@ from sklearn.ensemble        import RandomForestClassifier
 from sklearn.svm             import SVC
 from sklearn.neighbors       import KNeighborsClassifier
 from sklearn.naive_bayes     import GaussianNB
-import xgboost  as xgb
-import lightgbm as lgb
-import tensorflow as tf
+
+try:
+    import xgboost as xgb
+    XGB_AVAILABLE = True
+except ImportError:
+    XGB_AVAILABLE = False
+
+try:
+    import lightgbm as lgb
+    LGB_AVAILABLE = True
+except ImportError:
+    LGB_AVAILABLE = False
+
+try:
+    import tensorflow as tf
+    TF_AVAILABLE = True
+except ImportError:
+    TF_AVAILABLE = False
 
 from utils.data_utils import (
-    print_section, print_result, print_info,
+    print_section, print_info,
     classification_report_short, regression_report_short,
 )
 
@@ -188,6 +203,10 @@ def run_neural_network(X_train, X_test, y_train, y_test):
     print_section("6. Neural Network  (MLP binary classification)")
     print_info("Deep MLP with ReLU + Dropout – learns arbitrary non-linear boundaries.")
 
+    if not TF_AVAILABLE:
+        print_info("SKIPPED – tensorflow not installed  (pip install tensorflow)")
+        return {"accuracy": float("nan"), "f1": float("nan")}
+
     tf.random.set_seed(42)
     model = tf.keras.Sequential([
         tf.keras.layers.Dense(128, activation="relu",
@@ -249,27 +268,35 @@ def run_gradient_boosting(X_train, X_test, y_train, y_test):
     print_section("8a. XGBoost  (binary classification)")
     print_info("Stage-wise boosting of shallow trees – typically best tabular learner.")
 
-    xgb_model = xgb.XGBClassifier(
-        n_estimators=300, max_depth=5, learning_rate=0.05,
-        subsample=0.8, colsample_bytree=0.8,
-        use_label_encoder=False, eval_metric="logloss",
-        random_state=42, verbosity=0,
-    )
-    xgb_model.fit(X_train, y_train)
-    y_pred_xgb = xgb_model.predict(X_test)
-    m1 = classification_report_short(y_test, y_pred_xgb, "XGBoost")
+    if XGB_AVAILABLE:
+        xgb_model = xgb.XGBClassifier(
+            n_estimators=300, max_depth=5, learning_rate=0.05,
+            subsample=0.8, colsample_bytree=0.8,
+            use_label_encoder=False, eval_metric="logloss",
+            random_state=42, verbosity=0,
+        )
+        xgb_model.fit(X_train, y_train)
+        y_pred_xgb = xgb_model.predict(X_test)
+        m1 = classification_report_short(y_test, y_pred_xgb, "XGBoost")
+    else:
+        print_info("SKIPPED – xgboost not installed  (pip install xgboost)")
+        m1 = {"accuracy": float("nan"), "f1": float("nan")}
 
     print_section("8b. LightGBM  (binary classification)")
     print_info("Leaf-wise boosting with histograms – faster than XGBoost on large data.")
 
-    lgb_model = lgb.LGBMClassifier(
-        n_estimators=300, max_depth=5, learning_rate=0.05,
-        subsample=0.8, colsample_bytree=0.8,
-        random_state=42, verbose=-1,
-    )
-    lgb_model.fit(X_train, y_train)
-    y_pred_lgb = lgb_model.predict(X_test)
-    m2 = classification_report_short(y_test, y_pred_lgb, "LightGBM")
+    if LGB_AVAILABLE:
+        lgb_model = lgb.LGBMClassifier(
+            n_estimators=300, max_depth=5, learning_rate=0.05,
+            subsample=0.8, colsample_bytree=0.8,
+            random_state=42, verbose=-1,
+        )
+        lgb_model.fit(X_train, y_train)
+        y_pred_lgb = lgb_model.predict(X_test)
+        m2 = classification_report_short(y_test, y_pred_lgb, "LightGBM")
+    else:
+        print_info("SKIPPED – lightgbm not installed  (pip install lightgbm)")
+        m2 = {"accuracy": float("nan"), "f1": float("nan")}
 
     return m1, m2
 

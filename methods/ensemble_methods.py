@@ -16,20 +16,23 @@ When to prefer each algorithm
                 highest computational cost; often the most accurate.
 """
 
-import numpy as np
 from sklearn.ensemble         import (BaggingClassifier, AdaBoostClassifier,
                                        GradientBoostingClassifier,
                                        StackingClassifier, RandomForestClassifier)
 from sklearn.tree             import DecisionTreeClassifier
 from sklearn.linear_model     import LogisticRegression
 from sklearn.neighbors        import KNeighborsClassifier
-from sklearn.svm              import SVC
 from sklearn.naive_bayes      import GaussianNB
 from sklearn.model_selection  import cross_val_score
-import xgboost as xgb
+
+try:
+    import xgboost as xgb
+    XGB_AVAILABLE = True
+except ImportError:
+    XGB_AVAILABLE = False
 
 from utils.data_utils import (
-    print_section, print_result, print_info,
+    print_section, print_info,
     classification_report_short,
 )
 
@@ -151,6 +154,10 @@ def run_xgboost_ensemble(X_train, X_test, y_train, y_test):
     """
     print_section("2c. XGBoost  (ensemble context, 300 trees)")
     print_info("Regularised GBM with column subsampling – fast and state-of-the-art.")
+
+    if not XGB_AVAILABLE:
+        print_info("SKIPPED – xgboost not installed  (pip install xgboost)")
+        return {"accuracy": float("nan"), "f1": float("nan")}
 
     model = xgb.XGBClassifier(
         n_estimators=300, max_depth=5, learning_rate=0.05,

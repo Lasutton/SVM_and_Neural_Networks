@@ -21,7 +21,12 @@ When to prefer each algorithm
 """
 
 import numpy as np
-import tensorflow as tf
+
+try:
+    import tensorflow as tf
+    TF_AVAILABLE = True
+except ImportError:
+    TF_AVAILABLE = False
 
 from utils.data_utils import print_section, print_result, print_info
 
@@ -61,6 +66,10 @@ def run_contrastive_learning(X, y, epochs: int = 30):
     """
     print_section("1. Contrastive Learning  (SimCLR-inspired, tabular)")
     print_info("NT-Xent loss pulls augmented views of same sample together.")
+
+    if not TF_AVAILABLE:
+        print_info("SKIPPED – tensorflow not installed  (pip install tensorflow)")
+        return [], float("nan")
 
     tf.random.set_seed(42)
     n_features  = X.shape[1]
@@ -164,6 +173,10 @@ def run_masked_modelling(X, y, epochs: int = 30, mask_rate: float = 0.30):
     print_section("2. Masked Feature Modelling  (BERT / MAE-style, tabular)")
     print_info(f"Masks {int(mask_rate*100)}% of features; encoder learns to reconstruct them.")
 
+    if not TF_AVAILABLE:
+        print_info("SKIPPED – tensorflow not installed  (pip install tensorflow)")
+        return [], float("nan")
+
     tf.random.set_seed(42)
     n_feat = X.shape[1]
 
@@ -237,6 +250,10 @@ def run_next_feature_prediction(X, y, epochs: int = 30):
     """
     print_section("3. Next-Feature Prediction  (GPT-style autoregressive)")
     print_info("Autoregressive prediction of fᵢ given f₀…fᵢ₋₁ – learns feature order.")
+
+    if not TF_AVAILABLE:
+        print_info("SKIPPED – tensorflow not installed  (pip install tensorflow)")
+        return [], float("nan")
 
     tf.random.set_seed(42)
     n_feat     = X.shape[1]

@@ -30,9 +30,14 @@ When to prefer each algorithm
 """
 
 import numpy as np
-import tensorflow as tf
 from collections import deque
 import random
+
+try:
+    import tensorflow as tf
+    TF_AVAILABLE = True
+except ImportError:
+    TF_AVAILABLE = False
 
 from utils.data_utils import print_section, print_result, print_info
 
@@ -151,6 +156,10 @@ def run_dqn(X, y_binary, episodes: int = 1000):
     print_section("2. Deep Q-Network (DQN)")
     print_info("Neural Q-function + experience replay + target network.")
 
+    if not TF_AVAILABLE:
+        print_info("SKIPPED – tensorflow not installed  (pip install tensorflow)")
+        return float("nan")
+
     tf.random.set_seed(42)
     env = WineEnv(X, y_binary)
 
@@ -235,6 +244,10 @@ def run_policy_gradient(X, y_binary, episodes: int = 2000):
     print_section("3. Policy Gradient  (REINFORCE)")
     print_info("Directly ascends the policy gradient – unbiased but high-variance.")
 
+    if not TF_AVAILABLE:
+        print_info("SKIPPED – tensorflow not installed  (pip install tensorflow)")
+        return float("nan")
+
     tf.random.set_seed(42)
     env = WineEnv(X, y_binary)
 
@@ -245,7 +258,6 @@ def run_policy_gradient(X, y_binary, episodes: int = 2000):
         tf.keras.layers.Dense(env.n_actions, activation="softmax"),
     ])
     optimizer = tf.keras.optimizers.Adam(3e-4)
-    gamma = 0.99
 
     rewards_hist = []
     for ep in range(episodes):
@@ -284,6 +296,10 @@ def run_actor_critic(X, y_binary, episodes: int = 2000):
     """
     print_section("4. Actor-Critic  (A2C, shared backbone)")
     print_info("Actor (policy) + Critic (value baseline) – lower variance than REINFORCE.")
+
+    if not TF_AVAILABLE:
+        print_info("SKIPPED – tensorflow not installed  (pip install tensorflow)")
+        return float("nan")
 
     tf.random.set_seed(42)
     env = WineEnv(X, y_binary)
@@ -349,6 +365,10 @@ def run_ppo(X, y_binary, episodes: int = 2000, clip_eps: float = 0.2):
     print_section("5. Proximal Policy Optimisation  (PPO, clip ε=0.2)")
     print_info("Clipped surrogate objective prevents large destabilising updates.")
 
+    if not TF_AVAILABLE:
+        print_info("SKIPPED – tensorflow not installed  (pip install tensorflow)")
+        return float("nan")
+
     tf.random.set_seed(42)
     env = WineEnv(X, y_binary)
 
@@ -360,7 +380,6 @@ def run_ppo(X, y_binary, episodes: int = 2000, clip_eps: float = 0.2):
 
     model     = tf.keras.Model(inp, [actor, critic])
     optimizer = tf.keras.optimizers.Adam(3e-4)
-    gamma     = 0.99
     n_epochs  = 4
 
     rewards_hist  = []

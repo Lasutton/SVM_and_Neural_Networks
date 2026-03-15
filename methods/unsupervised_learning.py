@@ -27,8 +27,18 @@ from sklearn.cluster          import KMeans, AgglomerativeClustering, DBSCAN
 from sklearn.decomposition    import PCA
 from sklearn.metrics          import silhouette_score
 from sklearn.manifold         import TSNE
-import umap
-import tensorflow as tf
+
+try:
+    import umap
+    UMAP_AVAILABLE = True
+except ImportError:
+    UMAP_AVAILABLE = False
+
+try:
+    import tensorflow as tf
+    TF_AVAILABLE = True
+except ImportError:
+    TF_AVAILABLE = False
 
 from utils.data_utils import print_section, print_result, print_info
 
@@ -164,6 +174,10 @@ def run_autoencoder(X):
     print_section("5. Autoencoder  (encoding dim=4)")
     print_info("Non-linear encoder/decoder pair – learns a compressed latent space.")
 
+    if not TF_AVAILABLE:
+        print_info("SKIPPED – tensorflow not installed  (pip install tensorflow)")
+        return None, float("nan")
+
     tf.random.set_seed(42)
     input_dim  = X.shape[1]
     latent_dim = 4
@@ -208,6 +222,10 @@ def run_gan(X, epochs: int = 500):
     print_section("6. Generative Adversarial Network  (tabular, mini demo)")
     print_info("Generator + Discriminator play a minimax game – learns data distribution.")
 
+    if not TF_AVAILABLE:
+        print_info("SKIPPED – tensorflow not installed  (pip install tensorflow)")
+        return None, [], []
+
     tf.random.set_seed(42)
     n_features = X.shape[1]
     latent_dim = 16
@@ -237,7 +255,6 @@ def run_gan(X, epochs: int = 500):
 
     X_tensor = tf.constant(X, dtype=tf.float32)
     batch_sz  = 128
-    n_batches = len(X) // batch_sz
     d_losses, g_losses = [], []
 
     for epoch in range(epochs):
@@ -305,9 +322,13 @@ def run_tsne_umap(X, y):
     print_section("7b. UMAP  (2-D embedding, subset 2 000)")
     print_info("Uniform Manifold Approximation – faster and preserves global structure.")
 
-    reducer = umap.UMAP(n_components=2, random_state=42)
-    X_umap  = reducer.fit_transform(X_sub)
-    print_result("UMAP embedding shape", X_umap.shape)
+    if UMAP_AVAILABLE:
+        reducer = umap.UMAP(n_components=2, random_state=42)
+        X_umap  = reducer.fit_transform(X_sub)
+        print_result("UMAP embedding shape", X_umap.shape)
+    else:
+        print_info("SKIPPED – umap-learn not installed  (pip install umap-learn)")
+        X_umap = None
 
     return X_tsne, X_umap, y_sub
 
