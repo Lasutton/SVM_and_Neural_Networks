@@ -19,7 +19,6 @@ When to prefer each algorithm
 
 import numpy as np
 from sklearn.semi_supervised import LabelPropagation, SelfTrainingClassifier
-from sklearn.svm             import SVC
 from sklearn.linear_model    import LogisticRegression
 from sklearn.metrics         import accuracy_score, f1_score
 

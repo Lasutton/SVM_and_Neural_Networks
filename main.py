@@ -44,8 +44,6 @@ PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-import numpy as np
-
 from utils.data_utils import (
     load_wine_data, get_train_test,
     print_header, print_section, print_result, print_info,

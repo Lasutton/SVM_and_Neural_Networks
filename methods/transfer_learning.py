@@ -27,9 +27,14 @@ When to prefer each algorithm
 """
 
 import numpy as np
-import tensorflow as tf
 from sklearn.linear_model  import LogisticRegression
 from sklearn.metrics        import accuracy_score
+
+try:
+    import tensorflow as tf
+    TF_AVAILABLE = True
+except ImportError:
+    TF_AVAILABLE = False
 
 from utils.data_utils import print_section, print_result, print_info
 
@@ -72,6 +77,10 @@ def run_fine_tuning(df, X, y_binary, source_epochs: int = 30,
     """
     print_section("1. Fine-tuning  (pre-trained on red → fine-tuned on white)")
     print_info("All backbone layers are updated on the target domain.")
+
+    if not TF_AVAILABLE:
+        print_info("SKIPPED – tensorflow not installed  (pip install tensorflow)")
+        return float("nan")
 
     tf.random.set_seed(42)
     (X_red, y_red), (X_white, y_white) = split_by_color(df, X, y_binary)
@@ -118,6 +127,10 @@ def run_feature_extraction(df, X, y_binary, source_epochs: int = 30):
     """
     print_section("2. Feature Extraction  (frozen backbone + new linear head)")
     print_info("Backbone frozen; only a logistic regression head is trained on white wine.")
+
+    if not TF_AVAILABLE:
+        print_info("SKIPPED – tensorflow not installed  (pip install tensorflow)")
+        return float("nan")
 
     tf.random.set_seed(42)
     (X_red, y_red), (X_white, y_white) = split_by_color(df, X, y_binary)
@@ -172,6 +185,10 @@ def run_domain_adaptation(df, X, y_binary, epochs: int = 40):
     """
     print_section("3. Domain Adaptation  (MMD regularisation, red→white)")
     print_info("Encoder minimises source classification loss + MMD(source, target).")
+
+    if not TF_AVAILABLE:
+        print_info("SKIPPED – tensorflow not installed  (pip install tensorflow)")
+        return float("nan")
 
     tf.random.set_seed(42)
     (X_red, y_red), (X_white, y_white) = split_by_color(df, X, y_binary)
