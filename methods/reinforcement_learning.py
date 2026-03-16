@@ -39,7 +39,9 @@ try:
 except ImportError:
     TF_AVAILABLE = False
 
-from utils.data_utils import print_section, print_result, print_info
+from utils.data_utils import (
+    print_section, print_result, print_info, print_explain, print_score_bar,
+)
 
 
 # ── Wine Classification Environment ──────────────────────────────────────────
@@ -71,6 +73,24 @@ class WineEnv:
         return max(self.y.mean(), 1 - self.y.mean())
 
 
+def _reward_explanation(avg_reward: float) -> str:
+    """Plain-English explanation of an average RL reward score."""
+    # reward is in [-1, +1]; convert to accuracy-like for explanation
+    acc_equiv = (avg_reward + 1) / 2.0
+    pct = int(round(acc_equiv * 100))
+    if avg_reward >= 0.5:
+        verdict = "The agent is doing very well!"
+    elif avg_reward >= 0.2:
+        verdict = "The agent is learning but has room to improve."
+    elif avg_reward >= 0.0:
+        verdict = "The agent is slightly better than random guessing."
+    else:
+        verdict = "The agent is still struggling — negative means wrong more than right."
+    return (f"Plain English: average reward = {avg_reward:+.3f}  —  "
+            f"each correct guess gives +1, each wrong guess gives -1.  "
+            f"This is roughly equivalent to {pct}% correct guesses.  {verdict}")
+
+
 # ── 1. Q-Learning (tabular, discretised) ────────────────────────────────────
 
 def run_q_learning(X, y_binary, episodes: int = 5000):
@@ -88,8 +108,26 @@ def run_q_learning(X, y_binary, episodes: int = 5000):
     theoretically guaranteed convergent method; interpretability of the Q-table
     is useful.
     """
-    print_section("1. Q-Learning  (tabular, state discretised to 10 bins)")
-    print_info("Bellman updates on a finite Q-table – simplest RL algorithm.")
+    print_section("1. Q-Learning  (the simplest RL — a cheat-sheet of decisions)")
+    print_info("What is Reinforcement Learning?")
+    print_explain(
+        "In Reinforcement Learning (RL) there is no labeled dataset.  Instead, "
+        "an 'agent' (the learner) interacts with an 'environment' and gets "
+        "rewards (like points in a game).  Here, the agent is shown a wine's "
+        "measurements and guesses 'good' or 'not good'.  "
+        "Correct guess = +1 point.  Wrong guess = -1 point.  "
+        "No one tells the agent the right answer upfront — it learns from "
+        "trial and error over thousands of episodes!")
+    print_info("What is Q-Learning?")
+    print_explain(
+        "Q-Learning builds a giant lookup table (the Q-table) where each row "
+        "is a 'situation' (wine state) and each column is an action ('good'/'not good').  "
+        "Each cell stores the expected future reward for that action in that situation.  "
+        "Over time, the table gets filled with good estimates.  "
+        "It's like a cheat sheet: 'In this situation, action X is usually worth Y points.'  "
+        "The catch: our wines have continuous features, so we first bin them into "
+        "10 discrete buckets per feature.")
+    print_info(f"Training for {episodes:,} episodes (one wine guess = one episode).")
 
     env  = WineEnv(X, y_binary)
     bins = 10
@@ -130,10 +168,20 @@ def run_q_learning(X, y_binary, episodes: int = 5000):
         rewards_hist.append(reward)
 
     avg_reward = np.mean(rewards_hist[-1000:])
-    print_result("Episodes trained", episodes)
-    print_result("Avg reward (last 1 000 eps)", f"{avg_reward:.3f}")
-    print_result("Q-table entries", len(Q))
-    print_info(f"Random-policy baseline reward: {2*env.accuracy_of_random - 1:.3f}")
+    random_baseline = 2 * env.accuracy_of_random - 1
+    print_result("Episodes trained", f"{episodes:,}")
+    print_result("Q-table entries learned", len(Q))
+    print_explain(
+        f"The Q-table has {len(Q)} entries — one for each (wine-state, action) pair "
+        "the agent encountered during training.  More entries = more situations learned.")
+    print_score_bar("Agent reward (scale: -1 to +1)", (avg_reward + 1) / 2)
+    print_result("Avg reward (last 1,000 episodes)", f"{avg_reward:+.3f}")
+    print_explain(_reward_explanation(avg_reward))
+    print_result("Random-guessing baseline reward", f"{random_baseline:+.3f}")
+    print_explain(
+        f"A random agent (always guessing randomly) would score ~{random_baseline:+.3f}.  "
+        f"Our Q-learner scores {avg_reward:+.3f}.  "
+        f"{'The agent beat random guessing!' if avg_reward > random_baseline else 'The agent has not yet beaten random guessing.'}")
     return avg_reward
 
 
@@ -153,8 +201,18 @@ def run_dqn(X, y_binary, episodes: int = 1000):
     Best when: the state space is high-dimensional or continuous; tabular Q-
     learning is infeasible; you can afford GPU compute.
     """
-    print_section("2. Deep Q-Network (DQN)")
-    print_info("Neural Q-function + experience replay + target network.")
+    print_section("2. Deep Q-Network (DQN)  (Q-Learning + neural network brain)")
+    print_info("What is DQN?")
+    print_explain(
+        "Q-Learning's big weakness: the Q-table can get enormous with complex data.  "
+        "DQN fixes this by replacing the table with a NEURAL NETWORK that approximates "
+        "the Q-values.  Instead of 'look up this exact wine in the table', it says "
+        "'feed the wine's features through the network to estimate the best action'.  "
+        "Two clever tricks make it work:  "
+        "(1) Experience Replay — stores past experiences in memory and replays random "
+        "batches, like studying random flashcards instead of always the most recent one.  "
+        "(2) Target Network — uses a 'frozen copy' of the network as a stable target "
+        "so training doesn't chase its own tail.")
 
     if not TF_AVAILABLE:
         print_info("SKIPPED – tensorflow not installed  (pip install tensorflow)")
@@ -221,8 +279,10 @@ def run_dqn(X, y_binary, episodes: int = 1000):
             tgt_net.set_weights(q_net.get_weights())
 
     avg_reward = np.mean(rewards_hist[-200:])
-    print_result("Episodes trained", episodes)
-    print_result("Avg reward (last 200 eps)", f"{avg_reward:.3f}")
+    print_score_bar("Agent reward (scale: -1 to +1)", (avg_reward + 1) / 2)
+    print_result("Episodes trained", f"{episodes:,}")
+    print_result("Avg reward (last 200 episodes)", f"{avg_reward:+.3f}")
+    print_explain(_reward_explanation(avg_reward))
     return avg_reward
 
 
@@ -241,8 +301,18 @@ def run_policy_gradient(X, y_binary, episodes: int = 2000):
     the policy; stochasticity in the policy is desirable (exploration).
     High variance estimator; mitigated by baselines / actor-critic.
     """
-    print_section("3. Policy Gradient  (REINFORCE)")
-    print_info("Directly ascends the policy gradient – unbiased but high-variance.")
+    print_section("3. Policy Gradient (REINFORCE)  (learning directly from reward signals)")
+    print_info("What is Policy Gradient?")
+    print_explain(
+        "Instead of building a Q-table or Q-network, Policy Gradient directly "
+        "optimises a 'policy' — a function that says 'given this wine, output the "
+        "PROBABILITY of calling it good'.  "
+        "After each guess, it adjusts the probabilities:  "
+        "if the guess was right (+1 reward) → increase the probability of that action.  "
+        "if the guess was wrong (-1 reward) → decrease the probability.  "
+        "This is like a golfer practising: repeat swings that worked, "
+        "avoid swings that missed.  "
+        "The downside: it's 'high variance' — the updates can be noisy and unstable.")
 
     if not TF_AVAILABLE:
         print_info("SKIPPED – tensorflow not installed  (pip install tensorflow)")
@@ -274,8 +344,10 @@ def run_policy_gradient(X, y_binary, episodes: int = 2000):
         rewards_hist.append(reward)
 
     avg_reward = np.mean(rewards_hist[-500:])
-    print_result("Episodes trained", episodes)
-    print_result("Avg reward (last 500 eps)", f"{avg_reward:.3f}")
+    print_score_bar("Agent reward (scale: -1 to +1)", (avg_reward + 1) / 2)
+    print_result("Episodes trained", f"{episodes:,}")
+    print_result("Avg reward (last 500 episodes)", f"{avg_reward:+.3f}")
+    print_explain(_reward_explanation(avg_reward))
     return avg_reward
 
 
@@ -294,8 +366,17 @@ def run_actor_critic(X, y_binary, episodes: int = 2000):
     Best when: you want lower variance than REINFORCE with the same unbiasedness;
     episodic or continuous tasks; easily parallelised (A3C variant).
     """
-    print_section("4. Actor-Critic  (A2C, shared backbone)")
-    print_info("Actor (policy) + Critic (value baseline) – lower variance than REINFORCE.")
+    print_section("4. Actor-Critic (A2C)  (two teammates: one decides, one evaluates)")
+    print_info("What is Actor-Critic?")
+    print_explain(
+        "Actor-Critic is like a sports duo:  "
+        "The ACTOR is the player — they decide what action to take.  "
+        "The CRITIC is the coach — they judge how good the situation was and "
+        "give feedback: 'That was better than expected!' or 'That was worse than expected!'  "
+        "The actor adjusts based on the critic's feedback, not just raw rewards.  "
+        "This makes learning much more stable than pure Policy Gradient, "
+        "because the critic's baseline smooths out the noisy reward signals.  "
+        "The 'advantage' = actual reward − what the critic expected.")
 
     if not TF_AVAILABLE:
         print_info("SKIPPED – tensorflow not installed  (pip install tensorflow)")
@@ -341,8 +422,10 @@ def run_actor_critic(X, y_binary, episodes: int = 2000):
         rewards_hist.append(reward)
 
     avg_reward = np.mean(rewards_hist[-500:])
-    print_result("Episodes trained", episodes)
-    print_result("Avg reward (last 500 eps)", f"{avg_reward:.3f}")
+    print_score_bar("Agent reward (scale: -1 to +1)", (avg_reward + 1) / 2)
+    print_result("Episodes trained", f"{episodes:,}")
+    print_result("Avg reward (last 500 episodes)", f"{avg_reward:+.3f}")
+    print_explain(_reward_explanation(avg_reward))
     return avg_reward
 
 
@@ -362,8 +445,18 @@ def run_ppo(X, y_binary, episodes: int = 2000, clip_eps: float = 0.2):
     Best when: you need stable, sample-efficient policy learning; continuous
     control tasks (robotics, simulation); on-policy batch updates.
     """
-    print_section("5. Proximal Policy Optimisation  (PPO, clip ε=0.2)")
-    print_info("Clipped surrogate objective prevents large destabilising updates.")
+    print_section("5. PPO  (the state-of-the-art 'play it safe' RL algorithm)")
+    print_info("What is PPO?")
+    print_explain(
+        "PPO (Proximal Policy Optimisation) is the most popular modern RL algorithm — "
+        "used by OpenAI for ChatGPT's fine-tuning (RLHF) and robotics.  "
+        "The key idea: don't update the policy TOO much in one step.  "
+        "Big updates can destroy what the agent already learned (like forgetting everything "
+        "after one bad day of studying).  PPO 'clips' the update to stay within safe bounds: "
+        f"'never change the policy by more than {int(clip_eps*100)}% in one step.'  "
+        "This makes training MUCH more stable than vanilla Policy Gradient.  "
+        "It also reuses each batch of experience multiple times (n_epochs=4) "
+        "for better sample efficiency.")
 
     if not TF_AVAILABLE:
         print_info("SKIPPED – tensorflow not installed  (pip install tensorflow)")
@@ -427,8 +520,10 @@ def run_ppo(X, y_binary, episodes: int = 2000, clip_eps: float = 0.2):
             buffer_rewards.clear(); buffer_old_probs.clear()
 
     avg_reward = np.mean(rewards_hist[-500:])
-    print_result("Episodes trained", episodes)
-    print_result("Avg reward (last 500 eps)", f"{avg_reward:.3f}")
+    print_score_bar("Agent reward (scale: -1 to +1)", (avg_reward + 1) / 2)
+    print_result("Episodes trained", f"{episodes:,}")
+    print_result("Avg reward (last 500 episodes)", f"{avg_reward:+.3f}")
+    print_explain(_reward_explanation(avg_reward))
     return avg_reward
 
 

@@ -32,7 +32,7 @@ except ImportError:
     XGB_AVAILABLE = False
 
 from utils.data_utils import (
-    print_section, print_info,
+    print_section, print_info, print_explain,
     classification_report_short,
 )
 
@@ -60,8 +60,25 @@ def run_bagging(X_train, X_test, y_train, y_test):
     Best when: the base learner has high variance (e.g. deep trees); you want
     to reduce overfitting without losing too much bias.
     """
-    print_section("1. Bagging  (50 Decision Trees, bootstrap samples)")
-    print_info("Bootstrap-sampled trees voted → reduces variance, not bias.")
+    print_section("1. Bagging  (50 trees, each trained on a different random sample)")
+    print_info("What are Ensemble Methods?")
+    print_explain(
+        "Ensemble methods combine MANY models instead of relying on just one.  "
+        "The idea: even if each individual model is a bit wrong, they tend to make "
+        "DIFFERENT mistakes.  When you average or vote across many models, "
+        "the individual mistakes cancel out and the right answer wins!  "
+        "It's like asking 50 different people to guess how many jellybeans are in "
+        "a jar — the average of all guesses is usually closer than any single guess.")
+    print_info("What is Bagging?")
+    print_explain(
+        "Bagging (Bootstrap AGGregatING) trains 50 decision trees, but each "
+        "tree is trained on a DIFFERENT random sample of the wines.  "
+        "'Bootstrap' means sampling WITH replacement — like picking cards from "
+        "a deck, putting each card back, and shuffling again.  "
+        "Some wines appear in multiple trees' training sets; some don't appear at all.  "
+        "The wines left out of each tree's training (the 'out-of-bag' samples) "
+        "provide a free accuracy estimate — shown as the OOB score below!")
+    print_info("50 decision trees (max depth 8), each trained on a different bootstrap sample.")
 
     model = BaggingClassifier(
         estimator=DecisionTreeClassifier(max_depth=8),
@@ -75,7 +92,13 @@ def run_bagging(X_train, X_test, y_train, y_test):
     y_pred = model.predict(X_test)
 
     metrics = classification_report_short(y_test, y_pred, "Bagging (DT×50)")
-    print_info(f"Out-of-bag score: {model.oob_score_:.4f}")
+    print_info(f"Out-of-bag (OOB) accuracy: {model.oob_score_:.4f}  ({model.oob_score_*100:.1f}%)")
+    print_explain(
+        f"OOB score = {model.oob_score_:.4f}  —  this is a FREE accuracy estimate!  "
+        "For each tree, the wines it never saw in training are used to test it.  "
+        "If the OOB score is close to the test accuracy, the model generalises well.  "
+        "This means you don't even need a separate validation set — the training data "
+        "itself tells you how well the model will do on unseen wines!")
     return metrics
 
 
@@ -92,8 +115,25 @@ def run_adaboost(X_train, X_test, y_train, y_test):
     Best when: you have many weakly-correlated errors; base learner is a
     shallow tree; the dataset is noise-free (AdaBoost is sensitive to outliers).
     """
-    print_section("2a. AdaBoost  (200 stumps, SAMME.R)")
-    print_info("Sequential weighted combination of stumps – focuses on hard examples.")
+    print_section("2a. AdaBoost  (200 stumps, each focusing on previous mistakes)")
+    print_info("What is Boosting?")
+    print_explain(
+        "Boosting is like a relay race for weak learners.  "
+        "Each model passes its mistakes to the next model, which focuses extra "
+        "attention on the examples that were gotten wrong.  "
+        "Unlike Bagging (where models are independent), Boosting models are "
+        "SEQUENTIAL — each one must know what the previous one got wrong.")
+    print_info("What is AdaBoost?")
+    print_explain(
+        "AdaBoost (Adaptive Boosting) uses 200 'decision stumps' — that's a "
+        "Decision Tree with just ONE question (depth=1).  Incredibly simple!  "
+        "After each stump votes, wrongly classified wines get their 'importance weight' "
+        "increased so the NEXT stump pays more attention to those hard cases.  "
+        "At the end, each stump's vote is weighted by how accurate it was — "
+        "better stumps get louder voices.  "
+        "AdaBoost is sensitive to noisy/mislabeled data because it keeps "
+        "boosting the weight of any point it can't classify.")
+    print_info("200 stumps (depth=1 trees), learning rate=0.5.")
 
     model = AdaBoostClassifier(
         estimator=DecisionTreeClassifier(max_depth=1),   # stumps
@@ -124,8 +164,18 @@ def run_gradient_boosting_sklearn(X_train, X_test, y_train, y_test):
     Best when: you need the best accuracy on tabular data; you can tune the
     learning rate, max_depth, and n_estimators carefully.
     """
-    print_section("2b. Gradient Boosting  (sklearn GBM, 200 trees)")
-    print_info("Stage-wise tree fitting on pseudo-residuals – highest accuracy baseline.")
+    print_section("2b. Gradient Boosting  (200 trees, each fixing the previous residuals)")
+    print_info("What is Gradient Boosting?")
+    print_explain(
+        "Gradient Boosting is like a team of sculptors.  The first sculptor "
+        "makes a rough statue (first tree).  The second sculptor looks only at "
+        "what the first got wrong and fixes those parts (second tree).  "
+        "The third fixes what the first two missed, and so on.  "
+        "Mathematically, each tree fits the 'gradient' of the error — pointing "
+        "in the direction that will reduce mistakes fastest.  "
+        "Gradient Boosting tends to achieve the best accuracy on tables of numbers "
+        "like our wine data.  The trade-off: it's slow to train and can overfit.")
+    print_info("200 trees, depth=4, learning rate=0.05 (small steps for stability).")
 
     model = GradientBoostingClassifier(
         n_estimators=200, max_depth=4, learning_rate=0.05,
@@ -152,8 +202,18 @@ def run_xgboost_ensemble(X_train, X_test, y_train, y_test):
     Best when: you want top tabular performance with built-in regularisation;
     large datasets where speed matters.
     """
-    print_section("2c. XGBoost  (ensemble context, 300 trees)")
-    print_info("Regularised GBM with column subsampling – fast and state-of-the-art.")
+    print_section("2c. XGBoost  (the champion of tabular data competitions)")
+    print_info("What makes XGBoost special?")
+    print_explain(
+        "XGBoost (eXtreme Gradient Boosting) is the most famous boosting library — "
+        "it won hundreds of Kaggle data science competitions!  "
+        "It's faster than sklearn's Gradient Boosting because it:  "
+        "(1) Builds trees in parallel rather than one-at-a-time.  "
+        "(2) Uses clever histogram approximations to find splits faster.  "
+        "(3) Has built-in L1 and L2 regularisation to prevent overfitting.  "
+        "(4) Handles missing values natively (no need to fill them in first).  "
+        "On our wine dataset it's the single strongest individual model!")
+    print_info("300 trees, depth=5, learning rate=0.05, column subsampling=80%.")
 
     if not XGB_AVAILABLE:
         print_info("SKIPPED – xgboost not installed  (pip install xgboost)")
@@ -191,8 +251,24 @@ def run_stacking(X_train, X_test, y_train, y_test):
     style settings where the added complexity pays off; you have many diverse
     models already trained.
     """
-    print_section("3. Stacking  (RF + LR + KNN → Logistic meta-learner)")
-    print_info("Diverse base learners → out-of-fold predictions → meta-learner.")
+    print_section("3. Stacking  (a panel of experts, judged by a meta-expert)")
+    print_info("What is Stacking?")
+    print_explain(
+        "Stacking is the most sophisticated ensemble method.  "
+        "Instead of just voting, it uses a TWO-LEVEL system:  "
+        "Level 1 — Four diverse experts each give their prediction:  "
+        "  • Random Forest (tree-based, handles non-linearity)  "
+        "  • Logistic Regression (linear, calibrated probabilities)  "
+        "  • K-Nearest Neighbours (distance-based, local patterns)  "
+        "  • Naive Bayes (probability-based, very fast)  "
+        "Level 2 — A 'meta-learner' (another Logistic Regression) learns "
+        "WHICH expert to trust for WHICH types of wine.  "
+        "Maybe the KNN expert is great at identifying obvious 'great' wines, "
+        "but the Random Forest is better at borderline cases.  "
+        "The meta-learner figures this out automatically!  "
+        "This is often the highest-accuracy approach.")
+    print_info("Base: RandomForest + LogisticRegression + KNN + NaiveBayes.  "
+               "Meta: LogisticRegression.  5-fold cross-validation stacking.")
 
     base_estimators = [
         ("rf",  RandomForestClassifier(n_estimators=100, random_state=42,
@@ -218,7 +294,13 @@ def run_stacking(X_train, X_test, y_train, y_test):
     # Cross-validation score to assess generalisation
     cv_scores = cross_val_score(stacking, X_train, y_train, cv=3,
                                 scoring="accuracy", n_jobs=-1)
-    print_info(f"3-fold CV accuracy: {cv_scores.mean():.4f} ± {cv_scores.std():.4f}")
+    print_info(f"3-fold cross-validation accuracy: "
+               f"{cv_scores.mean():.4f} ± {cv_scores.std():.4f}")
+    print_explain(
+        f"Cross-validation mean = {cv_scores.mean():.4f}, std = {cv_scores.std():.4f}.  "
+        "This tests the model across 3 different data splits to make sure the result "
+        "isn't just lucky on one particular test set.  "
+        f"Small std ({cv_scores.std():.4f}) = consistent, reliable performance!")
     return metrics
 
 

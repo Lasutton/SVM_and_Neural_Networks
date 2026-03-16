@@ -36,7 +36,9 @@ try:
 except ImportError:
     TF_AVAILABLE = False
 
-from utils.data_utils import print_section, print_result, print_info
+from utils.data_utils import (
+    print_section, print_result, print_info, print_explain, print_score_bar,
+)
 
 
 # ── Shared backbone factory ───────────────────────────────────────────────────
@@ -75,8 +77,25 @@ def run_fine_tuning(df, X, y_binary, source_epochs: int = 30,
     target dataset is large enough to update all parameters without severe
     overfitting.
     """
-    print_section("1. Fine-tuning  (pre-trained on red → fine-tuned on white)")
-    print_info("All backbone layers are updated on the target domain.")
+    print_section("1. Fine-tuning  (learn from red wine, then adapt to white wine)")
+    print_info("What is Transfer Learning?")
+    print_explain(
+        "Transfer Learning is like a chef who was trained in French cuisine "
+        "(red wine pairing) and then applies that cooking knowledge to learn "
+        "Italian cuisine (white wine pairing) much faster than starting from scratch.  "
+        "The model first trains on RED wine data (1,599 samples).  "
+        "Then it uses that knowledge as a starting point to learn WHITE wine data "
+        "(4,898 samples).  Because red and white wine share chemistry fundamentals, "
+        "the head start makes the white-wine model better and faster!")
+    print_info("What is Fine-tuning?")
+    print_explain(
+        "Fine-tuning means we take the pre-trained model (trained on red wine) "
+        "and continue training ALL its layers on white wine data — but with a "
+        "much smaller learning rate (10× smaller) so we don't overwrite the "
+        "valuable red-wine knowledge too aggressively.  "
+        "Like a chef adjusting their recipe book rather than rewriting it entirely.")
+    print_info(f"Phase 1: train on red wine for {source_epochs} epochs.  "
+               f"Phase 2: fine-tune on white wine for {target_epochs} epochs.")
 
     if not TF_AVAILABLE:
         print_info("SKIPPED – tensorflow not installed  (pip install tensorflow)")
@@ -96,8 +115,13 @@ def run_fine_tuning(df, X, y_binary, source_epochs: int = 30,
                   loss="binary_crossentropy", metrics=["accuracy"])
     model.fit(X_red, y_red, epochs=source_epochs, batch_size=64,
               verbose=0, validation_split=0.1)
-    print_result("Source pre-training accuracy (val)",
-                 f"{model.history.history['val_accuracy'][-1]:.4f}")
+    source_val_acc = model.history.history['val_accuracy'][-1]
+    print_score_bar("Red wine pre-training val accuracy", source_val_acc)
+    print_result("Red wine source pre-training accuracy (validation)",
+                 f"{source_val_acc:.4f}  ({source_val_acc*100:.1f}%)")
+    print_explain(
+        f"The model correctly identified {source_val_acc*100:.1f}% of red wines as good/not-good.  "
+        "This knowledge is now 'baked into' the network weights.")
 
     # Phase 2 – fine-tune on target (white wine) with a smaller lr
     model.compile(optimizer=tf.keras.optimizers.Adam(1e-4),
@@ -107,7 +131,12 @@ def run_fine_tuning(df, X, y_binary, source_epochs: int = 30,
 
     y_pred = (model.predict(X_wte, verbose=0) > 0.5).astype(int).flatten()
     acc    = accuracy_score(y_wte, y_pred)
-    print_result("Fine-tuned accuracy on white wine", f"{acc:.4f}")
+    print_score_bar("White wine fine-tuned accuracy", acc)
+    print_result("Fine-tuned accuracy on white wine (test set)", f"{acc:.4f}  ({acc*100:.1f}%)")
+    print_explain(
+        f"After fine-tuning on white wine, accuracy = {acc*100:.1f}%.  "
+        "Compare this to Training From Scratch on white wine only — transfer learning "
+        "typically gives a better starting point and sometimes better final accuracy!")
     return acc
 
 
@@ -125,8 +154,19 @@ def run_feature_extraction(df, X, y_binary, source_epochs: int = 30):
     Best when: target dataset is small; you cannot risk overfitting the backbone;
     source and target domains share low-level features.
     """
-    print_section("2. Feature Extraction  (frozen backbone + new linear head)")
-    print_info("Backbone frozen; only a logistic regression head is trained on white wine.")
+    print_section("2. Feature Extraction  (use red-wine brain as a frozen detector)")
+    print_info("What is Feature Extraction?")
+    print_explain(
+        "Feature Extraction is the most conservative form of transfer learning.  "
+        "We train on red wine, then FREEZE (lock) ALL the neural network weights.  "
+        "The frozen network becomes a feature detector: feed in a white wine, "
+        "get out a 32-number 'fingerprint' that captures the wine's key patterns.  "
+        "Then we ONLY train a tiny logistic regression classifier on those fingerprints.  "
+        "Think of it as: the red-wine chef's entire knowledge is frozen in a book, "
+        "and a new apprentice reads the book and uses it to evaluate white wines — "
+        "the book never gets rewritten.  "
+        "Great when you have very few white wine examples!")
+    print_info("Backbone frozen after red-wine pre-training — only the new head trains.")
 
     if not TF_AVAILABLE:
         print_info("SKIPPED – tensorflow not installed  (pip install tensorflow)")
@@ -161,7 +201,13 @@ def run_feature_extraction(df, X, y_binary, source_epochs: int = 30):
     clf = LogisticRegression(max_iter=1000, random_state=42)
     clf.fit(emb_train, y_wtr)
     acc = accuracy_score(y_wte, clf.predict(emb_test))
-    print_result("Feature-extraction accuracy on white wine", f"{acc:.4f}")
+    print_score_bar("White wine feature-extraction accuracy", acc)
+    print_result("Feature-extraction accuracy on white wine", f"{acc:.4f}  ({acc*100:.1f}%)")
+    print_explain(
+        f"Using the frozen red-wine encoder as a feature extractor + a simple "
+        f"linear classifier on white wine achieves {acc*100:.1f}%.  "
+        "If this is close to fine-tuning accuracy, it means the red-wine features "
+        "transfer well and you don't need to update the backbone at all!")
     return acc
 
 
@@ -183,8 +229,21 @@ def run_domain_adaptation(df, X, y_binary, epochs: int = 40):
     regulariser is preferred over adversarial training; you need a principled
     measure of distribution shift.
     """
-    print_section("3. Domain Adaptation  (MMD regularisation, red→white)")
-    print_info("Encoder minimises source classification loss + MMD(source, target).")
+    print_section("3. Domain Adaptation  (aligning red and white wine in the same 'space')")
+    print_info("What is Domain Adaptation?")
+    print_explain(
+        "Domain Adaptation tackles a tricky problem: red wine and white wine "
+        "have different chemical profiles (different 'distributions').  "
+        "A model trained on red wine might perform poorly on white wine simply "
+        "because the two look different even when they have similar quality patterns.  "
+        "Domain Adaptation trains the model to produce features that look the "
+        "SAME for both red and white wine — so the quality-predicting parts of "
+        "the model don't get confused by the red-vs-white difference.  "
+        "MMD (Maximum Mean Discrepancy) measures how different the two distributions "
+        "are and penalises the model for keeping them apart.  "
+        "Think of it as teaching the model to ignore whether wine is red or white "
+        "and focus only on quality-relevant signals!")
+    print_info("Minimising: classification loss + 0.5 × MMD(red embeddings, white embeddings).")
 
     if not TF_AVAILABLE:
         print_info("SKIPPED – tensorflow not installed  (pip install tensorflow)")
@@ -257,7 +316,13 @@ def run_domain_adaptation(df, X, y_binary, epochs: int = 40):
     clf    = LogisticRegression(max_iter=1000, random_state=42)
     clf.fit(emb_tr, y_wtr)
     acc = accuracy_score(y_wte, clf.predict(emb_te))
-    print_result("Domain-adapted accuracy on white wine", f"{acc:.4f}")
+    print_score_bar("Domain-adapted accuracy on white wine", acc)
+    print_result("Domain-adapted accuracy on white wine", f"{acc:.4f}  ({acc*100:.1f}%)")
+    print_explain(
+        f"After alignment training, accuracy = {acc*100:.1f}% on white wine.  "
+        "Domain adaptation is especially useful when you have very few white wine "
+        "labels — the alignment allows the model to use red wine knowledge more "
+        "effectively for the white wine task.")
     return acc
 
 

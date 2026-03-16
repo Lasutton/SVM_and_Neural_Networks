@@ -53,7 +53,7 @@ except ImportError:
     TF_AVAILABLE = False
 
 from utils.data_utils import (
-    print_section, print_info,
+    print_section, print_info, print_explain,
     classification_report_short, regression_report_short,
 )
 
@@ -71,8 +71,14 @@ def run_linear_regression(X_train, X_test, y_train, y_test):
     Best when: the relationship between features and target is approximately
     linear; you need a fast, interpretable baseline.
     """
-    print_section("1. Linear Regression  (regression on quality score)")
-    print_info("Fits ŷ = Xw + b by minimising MSE – interpretable baseline.")
+    print_section("1. Linear Regression  (predicting the quality score directly)")
+    print_info("What is Linear Regression?")
+    print_explain(
+        "Imagine drawing a straight line through a scatter of dots on a graph.  "
+        "Linear Regression does exactly that — it draws the 'best fit' line "
+        "through all the wine data so it can guess a quality score for any new wine.  "
+        "It looks for a simple rule like: 'more alcohol + less acidity = higher score'.")
+    print_info("Goal here: predict the wine quality NUMBER (e.g. 6.3) — not just good/bad.")
 
     model = LinearRegression()
     model.fit(X_train, y_train)
@@ -80,7 +86,11 @@ def run_linear_regression(X_train, X_test, y_train, y_test):
 
     metrics = regression_report_short(y_test, y_pred, "Linear Regression")
     top3 = np.argsort(np.abs(model.coef_))[-3:][::-1]
-    print_info(f"Top-3 feature weights by magnitude: indices {list(top3)}")
+    print_info(f"The 3 features that mattered MOST (by weight magnitude): indices {list(top3)}")
+    print_explain(
+        "Think of 'weights' like importance scores.  The features with the biggest "
+        "weights are the ones the model thinks are most responsible for making a "
+        "wine taste good or bad.")
     return metrics
 
 
@@ -97,8 +107,14 @@ def run_logistic_regression(X_train, X_test, y_train, y_test):
     Best when: you need class probabilities; the boundary is roughly linear;
     regularisation (L1/L2) handles multicollinearity.
     """
-    print_section("2. Logistic Regression  (binary: good vs not-good)")
-    print_info("Sigmoid of linear combination → probability; fast, calibrated.")
+    print_section("2. Logistic Regression  (is this wine GOOD or NOT GOOD?)")
+    print_info("What is Logistic Regression?")
+    print_explain(
+        "Despite the name, this one CLASSIFIES — it doesn't predict a number.  "
+        "It answers a yes/no question: 'Is this wine good (score ≥ 7)?'  "
+        "It draws an invisible boundary between good and bad wines in the data, "
+        "then for any new wine it checks which side of the line it falls on.  "
+        "Like deciding whether a student passed or failed based on their grades.")
 
     model = LogisticRegression(max_iter=1000, random_state=42)
     model.fit(X_train, y_train)
@@ -120,16 +136,28 @@ def run_decision_tree(X_train, X_test, y_train, y_test):
     Best when: explainability is critical; you need a quick single-model
     baseline; mixing feature types.  Limit depth to prevent overfitting.
     """
-    print_section("3. Decision Tree  (binary classification)")
-    print_info("Recursive binary splits on features – fully interpretable.")
+    print_section("3. Decision Tree  (a flowchart of yes/no questions)")
+    print_info("What is a Decision Tree?")
+    print_explain(
+        "A Decision Tree is like a game of 20 Questions for wine!  "
+        "It asks a series of yes/no questions: 'Is the alcohol above 11%?'  "
+        "'Is the acidity below 6?'  Each answer leads to the next question.  "
+        "At the end of the questions, it says 'GOOD wine' or 'NOT GOOD'.  "
+        "The great thing is you can literally read the rules it learned — "
+        "no mystery box!")
 
     model = DecisionTreeClassifier(max_depth=6, random_state=42)
     model.fit(X_train, y_train)
     y_pred = model.predict(X_test)
 
     metrics = classification_report_short(y_test, y_pred, "Decision Tree")
-    print_info(f"Tree depth used: {model.get_depth()}  |  "
-               f"Leaves: {model.get_n_leaves()}")
+    print_info(f"Tree depth used: {model.get_depth()}  |  Leaves (final answers): {model.get_n_leaves()}")
+    print_explain(
+        f"Depth = {model.get_depth()} means the longest chain of questions is "
+        f"{model.get_depth()} questions deep.  "
+        f"Leaves = {model.get_n_leaves()} means there are {model.get_n_leaves()} "
+        f"different final answer buckets.  Too deep = memorises training data "
+        f"(overfitting); too shallow = misses patterns.")
     return metrics
 
 
@@ -146,8 +174,15 @@ def run_random_forest(X_train, X_test, y_train, y_test, feature_names):
     Best when: you want strong out-of-the-box performance on tabular data with
     minimal tuning; feature importance is useful; robustness to outliers matters.
     """
-    print_section("4. Random Forest  (binary classification)")
-    print_info("Ensemble of decorrelated trees → lower variance, higher accuracy.")
+    print_section("4. Random Forest  (200 decision trees vote together)")
+    print_info("What is a Random Forest?")
+    print_explain(
+        "Imagine asking 200 different wine experts for their opinion, where each "
+        "expert only looked at a random selection of wine facts.  Then you take the "
+        "majority vote.  That's a Random Forest!  Each 'expert' is one Decision Tree.  "
+        "Because each tree sees slightly different data, they make different mistakes.  "
+        "When they vote together, the mistakes cancel out and the right answer wins.  "
+        "This is called an 'ensemble' — wisdom of the crowd!")
 
     model = RandomForestClassifier(n_estimators=200, random_state=42, n_jobs=-1)
     model.fit(X_train, y_train)
@@ -157,8 +192,10 @@ def run_random_forest(X_train, X_test, y_train, y_test, feature_names):
 
     importances = model.feature_importances_
     top3_idx  = np.argsort(importances)[-3:][::-1]
-    top3_feats = [(feature_names[i], f"{importances[i]:.3f}") for i in top3_idx]
-    print_info(f"Top-3 features: {top3_feats}")
+    top3_feats = [(feature_names[i], f"{importances[i]*100:.1f}%") for i in top3_idx]
+    print_info("Top-3 most important wine features:")
+    for feat, pct in top3_feats:
+        print_explain(f"  → '{feat}' contributed {pct} of the decision-making power")
     return metrics
 
 
@@ -175,15 +212,28 @@ def run_svm(X_train, X_test, y_train, y_test):
     Best when: the feature space is high-dimensional; you have a clear margin of
     separation; dataset size is moderate (scales as O(n²–n³)).
     """
-    print_section("5. Support Vector Machine  (binary classification, RBF kernel)")
-    print_info("Maximum-margin hyperplane with RBF kernel for non-linear boundary.")
+    print_section("5. Support Vector Machine (SVM)  (finding the widest gap)")
+    print_info("What is an SVM?")
+    print_explain(
+        "Imagine all the 'good' wines are red dots and all the 'not good' wines "
+        "are blue dots on a big scatter plot.  An SVM tries to draw the WIDEST "
+        "possible gap (called a 'margin') between the two groups.  Wider gap = "
+        "more confident predictions.  The RBF kernel is a magic trick that lets "
+        "SVM draw curved boundaries, not just straight lines, so it can handle "
+        "more complex patterns.")
+    print_info("Using RBF (Radial Basis Function) kernel — allows curved decision boundaries.")
 
     model = SVC(kernel="rbf", C=1.0, gamma="scale", random_state=42)
     model.fit(X_train, y_train)
     y_pred = model.predict(X_test)
 
     metrics = classification_report_short(y_test, y_pred, "SVM (RBF)")
-    print_info(f"Support vectors: {model.n_support_}")
+    print_info(f"Support vectors used: {model.n_support_} (one count per class)")
+    print_explain(
+        "Support vectors are the data points RIGHT on the edge of the gap.  "
+        "They are the 'hardest cases' — the borderline wines that define where "
+        "good ends and not-good begins.  Only these critical points matter for "
+        "the SVM's decision — everything else is ignored!")
     return metrics
 
 
@@ -200,8 +250,18 @@ def run_neural_network(X_train, X_test, y_train, y_test):
     you can invest time in architecture search and hyper-parameter tuning;
     GPU compute is available.
     """
-    print_section("6. Neural Network  (MLP binary classification)")
-    print_info("Deep MLP with ReLU + Dropout – learns arbitrary non-linear boundaries.")
+    print_section("6. Neural Network  (a brain made of math)")
+    print_info("What is a Neural Network?")
+    print_explain(
+        "A neural network is loosely inspired by how your brain works!  "
+        "It has layers of 'neurons' (just numbers) that pass signals forward.  "
+        "The first layer receives the wine's features (alcohol, acidity, etc.).  "
+        "Each layer finds more complex patterns — layer 1 might notice 'high alcohol', "
+        "layer 2 might combine that with 'low acidity' to spot 'premium-style wine'.  "
+        "It learns by trying, making mistakes, and adjusting (back-propagation).  "
+        "Dropout randomly turns off some neurons during training so it doesn't "
+        "just memorise — it has to generalise.")
+    print_info("Architecture: 128 → 64 → 32 → 1 neurons.  Dropout prevents memorisation.")
 
     if not TF_AVAILABLE:
         print_info("SKIPPED – tensorflow not installed  (pip install tensorflow)")
@@ -238,8 +298,16 @@ def run_knn(X_train, X_test, y_train, y_test):
     Best when: local structure dominates; dataset is small-to-medium; you want
     a simple, instance-based baseline.  Poor with high dimensions or large n.
     """
-    print_section("7. K-Nearest Neighbours  (binary classification, k=7)")
-    print_info("Majority vote of 7 nearest neighbours – zero training, lazy learner.")
+    print_section("7. K-Nearest Neighbours (KNN)  (ask your 7 closest neighbours)")
+    print_info("What is KNN?")
+    print_explain(
+        "When KNN sees a new, unknown wine it asks: 'Which 7 wines in my memory "
+        "are most similar to this one?'  Then it takes a vote among those 7 wines.  "
+        "If 5 of the 7 neighbours are 'good' wines, the new wine is called 'good'.  "
+        "It's like asking your closest friends what they think before making a decision.  "
+        "KNN has NO training step — it simply remembers all the examples and "
+        "compares at prediction time.  This makes it slow on big datasets!")
+    print_info("k=7: looks at the 7 closest wines and takes a majority vote.")
 
     model = KNeighborsClassifier(n_neighbors=7, n_jobs=-1)
     model.fit(X_train, y_train)
@@ -265,8 +333,15 @@ def run_gradient_boosting(X_train, X_test, y_train, y_test):
     Best when: highest accuracy on tabular data matters; features may have
     missing values; you can tune regularisation hyperparameters.
     """
-    print_section("8a. XGBoost  (binary classification)")
-    print_info("Stage-wise boosting of shallow trees – typically best tabular learner.")
+    print_section("8a. XGBoost  (boosting: each tree fixes the last tree's mistakes)")
+    print_info("What is Gradient Boosting / XGBoost?")
+    print_explain(
+        "Imagine a student who takes a test, marks the wrong answers, then studies "
+        "ONLY the questions they got wrong before taking the next test.  "
+        "Gradient Boosting builds trees one after another, where each new tree "
+        "tries to fix the mistakes of the previous ones.  "
+        "XGBoost is a super-fast, super-smart version of this.  "
+        "It often wins machine learning competitions on table-style data!")
 
     if XGB_AVAILABLE:
         xgb_model = xgb.XGBClassifier(
@@ -282,8 +357,14 @@ def run_gradient_boosting(X_train, X_test, y_train, y_test):
         print_info("SKIPPED – xgboost not installed  (pip install xgboost)")
         m1 = {"accuracy": float("nan"), "f1": float("nan")}
 
-    print_section("8b. LightGBM  (binary classification)")
-    print_info("Leaf-wise boosting with histograms – faster than XGBoost on large data.")
+    print_section("8b. LightGBM  (like XGBoost but faster on large datasets)")
+    print_info("What is LightGBM?")
+    print_explain(
+        "LightGBM is a cousin of XGBoost — same 'fix your mistakes' idea, "
+        "but it uses a smarter way to find the best splits (histogram-based) "
+        "which makes it much faster when there are millions of data points.  "
+        "On our 6,500-wine dataset the speed difference is small, but on huge "
+        "datasets LightGBM can be 10× faster than XGBoost.")
 
     if LGB_AVAILABLE:
         lgb_model = lgb.LGBMClassifier(
@@ -314,8 +395,16 @@ def run_naive_bayes(X_train, X_test, y_train, y_test):
     Best when: dataset is small; features are reasonably independent; speed and
     simplicity are paramount; text classification (with Multinomial variant).
     """
-    print_section("9. Naive Bayes  (binary classification, Gaussian)")
-    print_info("Bayes' theorem + Gaussian likelihoods – blazing fast, good baseline.")
+    print_section("9. Naive Bayes  (probability-based, lightning fast)")
+    print_info("What is Naive Bayes?")
+    print_explain(
+        "Naive Bayes uses probability theory to classify wines.  It looks at "
+        "each feature independently (that's the 'naive' part — it assumes they "
+        "don't interact) and asks: 'Given this alcohol level, how likely is it "
+        "to be a good wine?'  Then it multiplies all those probabilities together.  "
+        "It's called naive because real wine features DO interact, but despite "
+        "this simplification it often works surprisingly well!  "
+        "And it's EXTREMELY fast — trains in milliseconds.")
 
     model = GaussianNB()
     model.fit(X_train, y_train)

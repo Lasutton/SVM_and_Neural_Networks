@@ -28,7 +28,9 @@ try:
 except ImportError:
     TF_AVAILABLE = False
 
-from utils.data_utils import print_section, print_result, print_info
+from utils.data_utils import (
+    print_section, print_result, print_info, print_explain, print_score_bar,
+)
 
 
 # ── Augmentation helpers ─────────────────────────────────────────────────────
@@ -64,8 +66,27 @@ def run_contrastive_learning(X, y, epochs: int = 30):
     Best when: large unlabeled dataset; meaningful data augmentations exist;
     you want strong transferable embeddings.
     """
-    print_section("1. Contrastive Learning  (SimCLR-inspired, tabular)")
-    print_info("NT-Xent loss pulls augmented views of same sample together.")
+    print_section("1. Contrastive Learning  (learning by comparing similar vs different)")
+    print_info("What is Self-Supervised Learning?")
+    print_explain(
+        "Self-supervised learning is when a model teaches ITSELF without any "
+        "human labels.  It creates its own 'puzzle' from the raw data and "
+        "learns by solving that puzzle.  For example: 'Can you tell that these "
+        "two scrambled versions of the same wine are actually the same wine?'  "
+        "The insight is that solving hard puzzles about data requires the model "
+        "to deeply understand the structure of that data.  "
+        "Afterward, that understanding transfers to real tasks like classification!")
+    print_info("What is Contrastive Learning?")
+    print_explain(
+        "Contrastive Learning creates two 'views' of each wine by adding random "
+        "noise (View 1) and randomly zeroing out some features (View 2).  "
+        "The model must learn to say: 'These two noisy versions are the SAME wine — "
+        "pull their representations together!'  AND 'These two come from DIFFERENT "
+        "wines — push them apart!'  "
+        "After training with NO labels at all, we test quality with a 'linear probe': "
+        "freeze the model, add a simple classifier on top, and see how well it works "
+        "with just a few labeled examples.")
+    print_info(f"Pre-training for {epochs} epochs with no labels whatsoever.")
 
     if not TF_AVAILABLE:
         print_info("SKIPPED – tensorflow not installed  (pip install tensorflow)")
@@ -149,9 +170,19 @@ def run_contrastive_learning(X, y, epochs: int = 30):
     probe.fit(Xe_tr, ye_tr)
     acc = accuracy_score(ye_te, probe.predict(Xe_te))
 
-    print_result("Pre-training epochs",            epochs)
-    print_result("Final contrastive loss",         f"{losses[-1]:.4f}")
-    print_result("Linear probe accuracy",          f"{acc:.4f}")
+    print_result("Pre-training epochs (no labels used)", epochs)
+    print_result("Final contrastive loss",    f"{losses[-1]:.4f}")
+    print_explain(
+        "Contrastive loss decreasing over epochs means the model is getting "
+        "better at recognising 'these two noisy versions came from the same wine'.  "
+        "Lower loss = stronger representations learned.")
+    print_score_bar("Linear probe accuracy", acc)
+    print_result("Linear probe accuracy (downstream task)", f"{acc:.4f}  ({acc*100:.1f}%)")
+    print_explain(
+        f"After self-supervised pre-training with ZERO labels, "
+        f"adding a simple linear classifier on top gives {acc*100:.1f}% accuracy.  "
+        "This demonstrates the quality of the representations learned — "
+        "a better encoder = higher linear probe score!")
     return losses, acc
 
 
@@ -170,8 +201,18 @@ def run_masked_modelling(X, y, epochs: int = 30, mask_rate: float = 0.30):
     Best when: features have meaningful correlations; you want a model that
     can handle missing values at inference time; large unlabeled datasets.
     """
-    print_section("2. Masked Feature Modelling  (BERT / MAE-style, tabular)")
-    print_info(f"Masks {int(mask_rate*100)}% of features; encoder learns to reconstruct them.")
+    print_section("2. Masked Feature Modelling  (hide some measurements, predict them back)")
+    print_info("What is Masked Modelling?")
+    print_explain(
+        "This is the same idea behind BERT (the famous language model) but for wine data!  "
+        "The model receives a wine with some measurements intentionally hidden (masked).  "
+        "It must predict what the hidden values were.  "
+        f"Here, {int(mask_rate*100)}% of each wine's features are randomly hidden.  "
+        "To guess correctly, the model must UNDERSTAND how wine features relate to each other — "
+        "'if I know the alcohol is high and the density is low, I can guess the residual sugar...'  "
+        "After this self-supervised training, the model has learned rich wine chemistry knowledge "
+        "that transfers to classifying wine quality!")
+    print_info(f"Randomly hiding {int(mask_rate*100)}% of features per wine during training.")
 
     if not TF_AVAILABLE:
         print_info("SKIPPED – tensorflow not installed  (pip install tensorflow)")
@@ -225,9 +266,20 @@ def run_masked_modelling(X, y, epochs: int = 30, mask_rate: float = 0.30):
     probe.fit(Xe_tr, ye_tr)
     acc = accuracy_score(ye_te, probe.predict(Xe_te))
 
-    print_result("Pre-training epochs",        epochs)
-    print_result("Final reconstruction MSE",   f"{losses[-1]:.6f}")
-    print_result("Linear probe accuracy",      f"{acc:.4f}")
+    print_result("Pre-training epochs (no labels used)", epochs)
+    print_result("Final reconstruction MSE (how well hidden values were predicted)",
+                 f"{losses[-1]:.6f}")
+    print_explain(
+        "Lower reconstruction MSE means the model has learned the relationships "
+        "between wine chemistry measurements well enough to fill in the gaps.  "
+        "This is like a multiple-choice test: lower error = smarter model!")
+    print_score_bar("Linear probe accuracy", acc)
+    print_result("Linear probe accuracy (downstream quality task)",
+                 f"{acc:.4f}  ({acc*100:.1f}%)")
+    print_explain(
+        f"After masked-modelling pre-training (still NO labels!), "
+        f"a simple linear layer on top achieves {acc*100:.1f}% accuracy.  "
+        "This is the BERT approach applied to wine data.")
     return losses, acc
 
 
@@ -248,8 +300,17 @@ def run_next_feature_prediction(X, y, epochs: int = 30):
     Best when: features have a natural ordering or causal relationship; you
     want a generative model that can impute any suffix of features.
     """
-    print_section("3. Next-Feature Prediction  (GPT-style autoregressive)")
-    print_info("Autoregressive prediction of fᵢ given f₀…fᵢ₋₁ – learns feature order.")
+    print_section("3. Next-Feature Prediction  (GPT-style: predict the next measurement)")
+    print_info("What is Next-Feature Prediction?")
+    print_explain(
+        "This is inspired by how ChatGPT works!  GPT learns language by predicting "
+        "the next word given all previous words.  Here we do the same thing with "
+        "wine measurements: given the first few features (acidity, sugar, etc.), "
+        "predict the next one (alcohol, density, etc.).  "
+        "The model must learn deep relationships between ALL the wine measurements "
+        "to do this well — kind of like learning the 'grammar' of wine chemistry.  "
+        "No labels needed — the raw measurements ARE the training signal!")
+    print_info("Training: show features 1 to k, predict feature k+1.  Repeat for all k.")
 
     if not TF_AVAILABLE:
         print_info("SKIPPED – tensorflow not installed  (pip install tensorflow)")
@@ -306,9 +367,19 @@ def run_next_feature_prediction(X, y, epochs: int = 30):
     probe.fit(Xe_tr, ye_tr)
     acc = accuracy_score(ye_te, probe.predict(Xe_te))
 
-    print_result("Pre-training epochs",      epochs)
-    print_result("Final prediction MSE",     f"{losses[-1]:.6f}")
-    print_result("Linear probe accuracy",    f"{acc:.4f}")
+    print_result("Pre-training epochs (no labels used)", epochs)
+    print_result("Final next-feature prediction MSE",  f"{losses[-1]:.6f}")
+    print_explain(
+        "Lower prediction error = the model learned the 'flow' of wine chemistry — "
+        "it can predict what measurements follow from others.  "
+        "This is exactly how language models learn grammar from raw text!")
+    print_score_bar("Linear probe accuracy", acc)
+    print_result("Linear probe accuracy (downstream quality task)",
+                 f"{acc:.4f}  ({acc*100:.1f}%)")
+    print_explain(
+        f"GPT-style pre-training (0 labels) → linear probe achieves {acc*100:.1f}%.  "
+        "This demonstrates that predicting the next wine feature teaches the model "
+        "something genuinely useful about wine quality!")
     return losses, acc
 
 

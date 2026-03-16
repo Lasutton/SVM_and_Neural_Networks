@@ -23,7 +23,7 @@ from sklearn.linear_model    import LogisticRegression
 from sklearn.metrics         import accuracy_score, f1_score
 
 from utils.data_utils import (
-    print_section, print_result, print_info,
+    print_section, print_result, print_info, print_explain, print_score_bar,
     split_labeled_unlabeled, classification_report_short,
 )
 
@@ -43,9 +43,25 @@ def run_self_training(X_train, X_test, y_train, y_test,
     Best when: you have a decent base learner; the labeled set is small but
     representative; unlabeled data is abundant.
     """
-    print_section("1. Self-training  (base: Logistic Regression, 10 % labeled)")
-    print_info(f"Iteratively pseudo-labels high-confidence unlabeled samples "
-               f"({int(labeled_fraction*100)}% labeled seed).")
+    print_section("1. Self-training  (the model teaches itself from unlabeled data!)")
+    print_info("What is Semi-Supervised Learning?")
+    print_explain(
+        "Normally, to train a model you need EVERY example to have a label "
+        "(e.g. 'good wine' or 'not good').  Labeling is expensive — imagine "
+        "paying expert wine tasters to rate thousands of bottles!  "
+        "Semi-supervised learning uses just a TINY labeled set plus a huge "
+        "unlabeled set.  Here we use only 10% labeled data and let the model "
+        "figure out the rest.")
+    print_info("What is Self-Training?")
+    print_explain(
+        "Self-training is like a student who:  "
+        "(1) Learns from the few examples they KNOW the answer to.  "
+        "(2) Then looks at the unknown examples and says 'I'm 95% sure this "
+        "one is a good wine' — and adds it to their study notes.  "
+        "(3) Repeats, getting smarter each round.  "
+        "Only very confident guesses get added (threshold = 85% confidence).")
+    print_info(f"Setup: only {int(labeled_fraction*100)}% of training wines are labeled — "
+               "the model must learn from the rest on its own.")
 
     X_l, y_l, X_ul, _ = split_labeled_unlabeled(
         X_train, y_train, labeled_fraction=labeled_fraction)
@@ -66,9 +82,13 @@ def run_self_training(X_train, X_test, y_train, y_test,
     base_sup.fit(X_l, y_l)
     y_pred_sup = base_sup.predict(X_test)
     acc_sup = accuracy_score(y_test, y_pred_sup)
-    print_info(f"Supervised-only (labeled only) accuracy: {acc_sup:.4f}  "
-               f"→ self-training gain: "
-               f"{metrics['accuracy'] - acc_sup:+.4f}")
+    gain = metrics['accuracy'] - acc_sup
+    print_result("Supervised-only accuracy (using only labeled data)", f"{acc_sup:.4f}")
+    print_result("Self-training accuracy (using labeled + unlabeled)", f"{metrics['accuracy']:.4f}")
+    print_explain(
+        f"Gain from using unlabeled data: {gain:+.4f}  "
+        f"({'Self-training HELPED by using the unlabeled data!' if gain > 0 else 'Self-training did not improve over labeled-only this time.'})  "
+        f"This shows {'the power' if gain > 0 else 'the limits'} of semi-supervised learning.")
     return metrics
 
 
@@ -87,8 +107,18 @@ def run_label_propagation(X_train, X_test, y_train, y_test,
     Best when: data has a smooth manifold structure; the labeled examples are
     distributed across clusters; graph construction cost is acceptable (O(n²)).
     """
-    print_section("2. Label Propagation  (RBF kernel, 10 % labeled)")
-    print_info("Spreads labels across a similarity graph – assumes manifold smoothness.")
+    print_section("2. Label Propagation  (spreading labels like a rumour through a network)")
+    print_info("What is Label Propagation?")
+    print_explain(
+        "Imagine a classroom where only a few students know the right answer.  "
+        "A student who knows the answer whispers it to similar-looking students nearby.  "
+        "Those students pass it along to their similar neighbours, and so on — "
+        "like a rumour spreading through a network.  "
+        "Label Propagation builds a 'similarity graph' where similar wines are connected, "
+        "then spreads the 'good/not-good' label along the connections.  "
+        "Wines far from any labeled example might still get the right label "
+        "if there's a path of similar wines leading to them!")
+    print_info("Using 2,000 unlabeled examples (subsampled for speed).")
 
     X_l, y_l, X_ul, _ = split_labeled_unlabeled(
         X_train, y_train, labeled_fraction=labeled_fraction)
@@ -128,8 +158,18 @@ def run_co_training(X_train, X_test, y_train, y_test,
     Best when: two naturally separate but complementary feature sets exist
     (multi-view data); each view is sufficient on its own for some accuracy.
     """
-    print_section("3. Co-training  (2 views, 10 % labeled, 10 iterations)")
-    print_info("Two classifiers on complementary feature views label each other's data.")
+    print_section("3. Co-training  (two experts teach each other)")
+    print_info("What is Co-training?")
+    print_explain(
+        "Co-training uses TWO classifiers that look at DIFFERENT parts of the data.  "
+        "Think of two doctors: one only reads the blood tests (acidity, sulfur) "
+        "and one only reads the physical exam results (density, alcohol).  "
+        "Each doctor labels the patients they're most confident about, then "
+        "passes those labels to the other doctor to learn from.  "
+        "They take turns teaching each other, getting smarter with each round!  "
+        "View 1: acidity/sulfur features.  View 2: density/alcohol/colour features.")
+    print_info(f"Running {iterations} rounds of mutual teaching, "
+               f"adding {k_best} confident labels per round per classifier.")
 
     X_l, y_l, X_ul, _ = split_labeled_unlabeled(
         X_train, y_train, labeled_fraction=labeled_fraction)
@@ -199,8 +239,16 @@ def run_co_training(X_train, X_test, y_train, y_test,
 
     acc = accuracy_score(y_test, y_pred)
     f1  = f1_score(y_test, y_pred, average="weighted", zero_division=0)
-    print_result("Co-training Accuracy",     f"{acc:.4f}")
-    print_result("Co-training F1 (weighted)", f"{f1:.4f}")
+    print_score_bar("Accuracy", acc)
+    print_result("Co-training Accuracy",      f"{acc:.4f}  ({acc*100:.1f}%)")
+    print_explain(
+        f"Plain English: out of 100 wines, Co-training correctly classified "
+        f"{int(acc*100)} using only {int(labeled_fraction*100)}% labeled training data.")
+    print_score_bar("F1 Score (weighted)", f1)
+    print_result("Co-training F1 Score (weighted)", f"{f1:.4f}  ({f1*100:.1f}%)")
+    print_explain(
+        "The two-expert approach combines their probabilities for a final answer — "
+        "both need to agree somewhat before being confident.")
     return {"accuracy": acc, "f1": f1}
 
 
